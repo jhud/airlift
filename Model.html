@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<title>Airlift</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<style>
+		body 
+		{
+			font-family: Monospace;
+			font-weight: bold;
+			background-color: #9999ff;
+			margin: 0px;
+			overflow: hidden;
+		}
+	</style>
+</head>
+<body>
+
+<div id="message"></div>
+
+<script src="js/Three.js"></script>
+<script src="js/Detector.js"></script>
+<script src="js/Stats.js"></script>
+<script src="js/TrackballControls.js"></script>
+<script src="js/THREEx.KeyboardState.js"></script>
+<script src="js/THREEx.FullScreen.js"></script>
+<script src="js/THREEx.WindowResize.js"></script>
+
+<script src="enemy.js"></script>
+
+<script>
+
+document.addEventListener( 'mousedown', onDocumentMouseDown, false );
+
+// MAIN
+if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+// standard global variables
+var container, scene, camera, renderer, controls, stats, projector;
+var keyboard = new THREEx.KeyboardState();
+var clock = new THREE.Clock();
+
+init();
+animate();
+
+// FUNCTIONS 		
+function init() 
+{
+	game = {};
+	game.enemies = [];
+
+	// SCENE
+	scene = new THREE.Scene();
+	// CAMERA
+	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
+	projector = new THREE.Projector();
+	scene.add(camera);
+	camera.position.set(0,20,-80);
+	// RENDERER
+	renderer = new THREE.WebGLRenderer( {antialias:true} );
+	renderer.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+	renderer.shadowMapEnabled = true;
+	container = document.createElement( 'div' );
+	document.body.appendChild( container );
+	container.appendChild( renderer.domElement );
+	// EVENTS
+	THREEx.WindowResize(renderer, camera);
+	THREEx.FullScreen.bindKey({ charCode : 'm'.charCodeAt(0) });
+	// CONTROLS
+	controls = new THREE.TrackballControls( camera );
+	controls.target = new THREE.Vector3(0,25,0);	
+	// STATS
+	stats = new Stats();
+	stats.domElement.style.position = 'absolute';
+	stats.domElement.style.bottom = '0px';
+	stats.domElement.style.zIndex = 100;
+	container.appendChild( stats.domElement );
+	// LIGHT
+	var light = new THREE.SpotLight(0xffffff);
+	light.position.set(-200,400,200);
+	light.castShadow = true;
+	scene.add(light);
+
+	setupGround();
+	setupLaser();
+
+	scene.fog = new THREE.Fog( 0x9999ff, 1400, 2000 );
+	
+	var jsonLoader = new THREE.JSONLoader();
+	jsonLoader.load( "models/spaceship.js", addModelToScene );
+	// addModelToScene function is called back after model has loaded
+	
+	var ambientLight = new THREE.AmbientLight(0x111111);
+	scene.add(ambientLight);
+	
+}
+
+function setupGround()
+{
+	var floorTexture = new THREE.ImageUtils.loadTexture( 'textures/earth.jpg' );
+	floorTexture.wrapS = THREE.RepeatWrapping;
+	floorTexture.wrapT = THREE.RepeatWrapping;
+	floorTexture.repeat.set( 8, 8 ); 
+	var floorMaterial = new THREE.MeshBasicMaterial( { map: floorTexture, side: THREE.DoubleSide } );
+	var floorGeometry = new THREE.PlaneGeometry(5120, 5120, 2, 2);
+	game.ground = new THREE.Mesh(floorGeometry, floorMaterial);
+	game.ground.position.y = -100;
+	game.ground.rotation.x = Math.PI / 2;
+	game.ground.castShadow = false;
+	game.ground.receiveShadow = true;
+	scene.add(game.ground);
+}
+
+function setupLaser()
+{
+	var texture = new THREE.ImageUtils.loadTexture( 'textures/laser.png' );
+	var material = new THREE.MeshBasicMaterial( { map: texture, transparent: true, opacity:0.5, blending: THREE.AdditiveBlending } );
+	var geometry = new THREE.CylinderGeometry(3, 3, 1000, 3, 20, true);
+	var orientation = new THREE.Matrix4();
+orientation.setRotationFromEuler(new THREE.Vector3(Math.PI/2,0,0));//rotate on X 90 degrees
+orientation.setPosition(new THREE.Vector3(0,0,500));//move half way on Z, since default pivot is at centre
+geometry.applyMatrix(orientation);//apply transformation for geometry
+
+	game.laser = new THREE.Mesh(geometry, material);
+		game.laser.position.x = 0;
+			game.laser.position.y = 0;
+	game.laser.position.z = 0;
+	game.laser.castShadow = false;
+	game.laser.receiveShadow = false;
+	game.laser.visible = false;
+	scene.add(game.laser);
+}
+
+function addModelToScene( geometry, materials ) 
+{
+	var material = new THREE.MeshFaceMaterial( materials );
+	
+	for (var i=0; i<10; i++) {
+		var model = new THREE.Mesh( geometry, material );
+		model.castShadow = true;
+		model.receiveShadow = false;
+		scene.add( model );
+		game.enemies.push(new Enemy(model));
+	}
+	
+	game.player = new THREE.Mesh( geometry, material );
+	game.player.scale.set(5.0, 5.0, 5.0);
+	game.player.rotation.y = Math.PI;
+			game.player.castShadow = true;
+		game.player.receiveShadow = true;
+	scene.add(game.player);
+	
+		camera.lookAt(game.player);	
+}
+
+function animate() 
+{
+    requestAnimationFrame( animate );
+	render();		
+	update();
+}
+
+function update()
+{
+	var delta = clock.getDelta(); // seconds.
+
+	if ( keyboard.pressed("z") ) 
+	{ 
+		// do something
+	}
+	
+	game.enemies.forEach(function (enemy) {
+		enemy.update(delta);
+	});
+	
+	game.ground.position.z -= delta*15;
+	if (game.ground.position.z < 640){
+		game.ground.position.z += 640;
+	}
+	
+	controls.update();
+	stats.update();
+}
+
+function render() 
+{
+	renderer.render( scene, camera );
+}
+
+function onDocumentMouseDown( event )
+{
+	event.preventDefault();
+
+				var vector = new THREE.Vector3( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1, 0.5 );
+				projector.unprojectVector( vector, camera );
+
+				var raycaster = new THREE.Raycaster( camera.position, vector.sub( camera.position ).normalize() );
+
+				var objects = game.enemies.map(function(enemy) { return enemy.mesh; });
+				var intersects = raycaster.intersectObjects( objects );
+
+				if ( intersects.length > 0 ) {
+					var shot = intersects[ 0 ].object;
+					
+					game.laser.lookAt(new THREE.Vector3(shot.position.x,shot.position.y,shot.position.z));
+					game.laser.visible = true;
+					setTimeout(function(){game.laser.visible=false;},100);
+					
+					scene.remove(shot);
+					game.enemies.remove(shot);
+
+				}
+}
+			
+
+</script>
+
+</body>
+</html>
